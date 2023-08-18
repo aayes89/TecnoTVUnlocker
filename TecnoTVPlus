@@ -1,0 +1,167 @@
+/**
+ *
+ * @author Slam
+ */
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class TecnoTVPlus {
+
+    public static void main(String[] args) {
+        List<String> capture = new ArrayList<>();
+        List<String> pics = new ArrayList<>();
+        String nurl = "http://tecnotv.club/plus/";
+
+        while (nurl != null) {
+            System.out.println("Current URL: " + nurl);
+            nurl = gatheringData(capture, pics, nurl);
+        }
+
+        System.out.println("---- Gathered videos ----");
+        for (int pos = 0; pos < capture.size() && pos < pics.size(); pos++) {
+            String rmov = capture.get(pos);
+            String pic = pics.get(pos);
+
+            String rmov1 = rmov.substring(rmov.indexOf("http"), rmov.indexOf(".mp4") + 4).replace("\\/", "/").strip();
+            String splash = pic.substring(pic.indexOf("http"), pic.indexOf(".jpg") + 4).replace("\\/", "/").strip();
+            if (!rmov.contains(".mp4")) {
+                System.out.println("Video: " + rmov + " Pic: " + splash);
+            } else {
+                System.out.println("Video: " + rmov1 + " Pic: " + splash);
+            }
+        }
+    }
+
+    public static String gatheringData(List<String> capture, List<String> pics, String nurl) {
+        try {
+            URL url = new URL(nurl);
+            HttpURLConnection urlc = (HttpURLConnection) url.openConnection();
+            urlc.setRequestMethod("GET");
+            try (BufferedReader in = new BufferedReader(new InputStreamReader(urlc.getInputStream()))) {
+                String line;
+                while ((line = in.readLine()) != null) {
+                    if (line.contains("<a class=\"elementor-post__thumbnail__link\"")) {
+                        String urlFromLine = urlExtractor(line);
+                        gatherDataFromUrl(urlFromLine, capture, pics);
+                    }
+                    if (line.contains("data-next-page=")) {
+                        String segm = "data-next-page=", segm1 = "\"></div>";
+                        nurl = line.substring(line.indexOf(segm) + segm.length() + 1, line.indexOf(segm1));
+                        return nurl;
+                    }
+                }
+            }
+        } catch (IOException ex) {
+            System.out.println(ex.getMessage());
+        }
+        return null;
+    }
+
+    public static String urlExtractor(String murl) {
+        String idx0 = "<a class=\"elementor-post__thumbnail__link\" href=\"";
+        String lastIdx = "\" >";
+        int startIdx = murl.indexOf(idx0) + idx0.length();
+        int endIdx = murl.indexOf(lastIdx, startIdx);
+        return murl.substring(startIdx, endIdx);
+    }
+
+    public static String extractImageUrl(String fragmento) {
+        /*String videoTag = "<video class=\"js-player\" poster=\"";
+        String videoEndTag = "\" preload=\"none\"";
+
+        int videoIndex = fragmento.indexOf(videoTag);
+
+        if (videoIndex != -1) {
+            int videoEndIndex = fragmento.indexOf(videoEndTag, videoIndex + videoTag.length());
+            if (videoEndIndex != -1) {
+                return fragmento.substring(videoIndex + videoTag.length(), videoEndIndex);
+            }
+        }*/
+
+        String startTag = "\"featuredImage\":\"";
+        String endTag = "\"}";
+
+        int startIndex = fragmento.indexOf(startTag);
+
+        if (startIndex != -1) {
+            int endIndex = fragmento.indexOf(endTag, startIndex + startTag.length());
+            if (endIndex != -1) {
+                String imageUrlWithParams = fragmento.substring(startIndex + startTag.length(), endIndex);
+
+                // Eliminate parameters from the URL
+                int paramsIndex = imageUrlWithParams.indexOf("?");
+                if (paramsIndex != -1) {
+                    return imageUrlWithParams.substring(0, paramsIndex);
+                }
+                return imageUrlWithParams;
+            }
+        }
+
+        return null;
+    }
+
+    public static void gatherDataFromUrl(String nurl, List<String> capture, List<String> pics) throws IOException {
+        URL url = new URL(nurl);
+        HttpURLConnection urlc = (HttpURLConnection) url.openConnection();
+        urlc.setRequestMethod("GET");
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(urlc.getInputStream()))) {
+            String nline;
+            while ((nline = br.readLine()) != null) {
+
+                if (nline.contains("<source")) {
+                    String videoUrl = extractVideoUrlFromVideoTag(nline);
+
+                    if (videoUrl != null) {
+                        capture.add(videoUrl);
+                    }
+                } else if (nline.contains("data-id=\"") && nline.contains("data-element_type=\"widget\"")) {
+                    String videoUrl = extractVideoUrlFromWidget(nline);
+                    if (videoUrl != null) {
+                        capture.add(videoUrl);
+                    }
+                } else if (nline.contains(".mp4")) {
+                    capture.add(nline);
+                } else if (nline.contains("featuredImage")) {
+                    String result = extractImageUrl(nline);
+                    if (result != null) {
+                        pics.add(result);
+                    }
+                }
+            }
+        }
+    }
+
+    public static String extractVideoUrlFromWidget(String line) {
+        String pattern = "src=\"([^\"]+)\"";
+        Pattern videoSrcPattern = Pattern.compile(pattern);
+        Matcher matcher = videoSrcPattern.matcher(line);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return null;
+    }
+
+    public static String extractVideoUrlFromVideoTag(String fragmento) {
+        String sourceTag = "<source src=\"";
+        String sourceEndTag = "\" type=\"video/";
+
+        int sourceIndex = fragmento.indexOf(sourceTag);
+
+        if (sourceIndex != -1) {
+            int sourceEndIndex = fragmento.indexOf(sourceEndTag, sourceIndex + sourceTag.length());
+            if (sourceEndIndex != -1) {
+                return fragmento.substring(sourceIndex + sourceTag.length(), sourceEndIndex);
+            }
+        }
+
+        return null;
+    }
+
+}
